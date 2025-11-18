@@ -17,3 +17,4 @@ UserSettings/
 *.db
 *.opendb
 *.VC.db
+.plastic/
