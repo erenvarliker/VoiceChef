@@ -1,50 +1,127 @@
 import os
 import shutil
+import json
 import speech_recognition as sr
 import whisper
 import pyttsx3
 from openai import OpenAI
 
-# ---------- CONFIG ----------
-# ffmpeg location (you already have this)
+# ---------- ffmpeg path ----------
 os.environ["PATH"] += os.pathsep + r"C:\ffmpg\bin"
 print("ffmpeg path:", shutil.which("ffmpeg"))
 
-# OpenAI client (API key must be in OPENAI_API_KEY env var)
+
+import json
+from openai import OpenAI
+
+# ---------- OpenAI client ----------
 client = OpenAI(
   api_key=""
 )
+#api key koymamız lazım bende var github a puslayamıyorum izin vermiyo
 
-#api key yazan yere api key koymak lazım hardcopy yazınca githubdan pushlatmıyo bende 5 dolarlık var atabilirim denemek isterseniz
+VOICE_CHEF_SYSTEM = """
+You are Voice Chef, a friendly cooking and kitchen assistant running inside a HoloLens app.
+The user is speaking in English. You must:
+- Help with cooking, kitchen tasks, food questions, and simple smalltalk if needed.
+- When the user asks for actions like "set a timer", "start a timer", "remind me", etc.,
+  you must emit a structured action so the HoloLens app can react.
 
-# ---------- MODELS ----------
-# Whisper STT model
-model = whisper.load_model("small")  # or "base"/"tiny" if needed
+You MUST respond as a single JSON object with this exact schema:
 
-# SpeechRecognition recognizer
+{
+  "assistant_role": "voice_chef",
+  "response_text": "What you will say out loud to the user in English.",
+  "actions": [
+    {
+      "type": "string, e.g. 'set_timer'",
+      "parameters": {
+        "duration_seconds": number (integer, optional, only for timers),
+        "raw_text": "original user intent or extra info if needed"
+      }
+    }
+  ]
+}
+
+Rules:
+- Always include "assistant_role" and set it to "voice_chef".
+- Always include "response_text" as a natural English sentence.
+- Always include "actions" as an array (use [] if no action).
+- For a timer request like "set a timer for 5 minutes", add ONE action:
+  {
+    "type": "set_timer",
+    "parameters": {
+      "duration_seconds": 300,
+      "raw_text": "set a timer for 5 minutes"
+    }
+  }
+- Do NOT include any explanation, comments, markdown, or code fences.
+- Output MUST be valid JSON ONLY.
+"""
+
+def ask_gpt_structured(user_text: str) -> dict:
+    """Call GPT and parse its JSON response into a Python dict."""
+    response = client.responses.create(
+        model="gpt-4o-mini",
+        input=[
+            {"role": "system", "content": VOICE_CHEF_SYSTEM},
+            {"role": "user", "content": user_text},
+        ],
+    )
+
+    # SDK'nin sağladığı helper varsa:
+    try:
+        raw = response.output_text
+    except AttributeError:
+        # Eski biçim: output[0].content[0].text gibi olabilir
+        raw = response.output[0].content[0].text
+
+    raw = raw.strip()
+    print("RAW GPT OUTPUT:", raw)  # debug için
+
+    # JSON'a parse et
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        # Model JSON dışına çıkarsa, minimum düzeltme: hiçbir action yok, text raw olsun
+        print("JSON parse error, falling back.")
+        data = {
+            "assistant_role": "voice_chef",
+            "response_text": raw,
+            "actions": [],
+        }
+
+    return data
+
+
+# ---------- Whisper / SR / TTS ----------
+model = whisper.load_model("small")
+
 r = sr.Recognizer()
 r.pause_threshold = 1.2
 
-# pyttsx3 TTS engine
-engine = pyttsx3.init()
-
-# Try to select an English voice if available
-voices = engine.getProperty("voices")
-for v in voices:
-    if "English" in v.name or "en-" in v.id.lower():
-        engine.setProperty("voice", v.id)
-        break
-
-# ---------- FUNCTIONS ----------
-
 def speak(text: str):
-    """Read GPT's answer out loud."""
+    """Create a fresh TTS engine each time and speak."""
+    if not text:
+        return
+
     print("Voice Chef:", text)
+
+    engine = pyttsx3.init()  # new engine each call
+
+    # optional: pick English voice
+    voices = engine.getProperty("voices")
+    for v in voices:
+        if "English" in v.name or "en-" in v.id.lower():
+            engine.setProperty("voice", v.id)
+            break
+
     engine.say(text)
     engine.runAndWait()
+    engine.stop()
+
 
 def record_text() -> str:
-    """Listen from microphone and return transcribed English text."""
     while True:
         try:
             with sr.Microphone() as source2:
@@ -54,15 +131,13 @@ def record_text() -> str:
                 print("Listening...")
                 audio2 = r.listen(source2)
 
-                # Save temporary wav
                 wav_path = "temp.wav"
                 with open(wav_path, "wb") as f:
                     f.write(audio2.get_wav_data())
 
-                # Transcribe with Whisper (English)
                 result = model.transcribe(
                     wav_path,
-                    language="en",   # listening in English
+                    language="en",
                     fp16=False
                 )
                 my_text = result["text"].strip()
@@ -72,33 +147,9 @@ def record_text() -> str:
                 return my_text
         
         except Exception as e:
-            print("An error occurred while recording:", repr(e))
+            print("Error while recording:", repr(e))
 
-def ask_gpt(prompt: str) -> str:
-    """Send text to GPT-4o mini and return the model's reply."""
-    try:
-        response = client.responses.create(
-            model="gpt-4o-mini",
-            input=prompt,
-        )
-        # If your SDK has output_text helper:
-        try:
-            return response.output_text.strip()
-        except AttributeError:
-            # Fallback to raw structure
-            return response.output[0].content[0].text.strip()
-    except Exception as e:
-        print("Error while calling GPT:", repr(e))
-        return "Sorry, I had a problem talking to my brain."
-
-def log_text(role: str, text: str):
-    """Save conversation to a log file."""
-    with open("conversation_log.txt", "a", encoding="utf-8") as f:
-        f.write(f"{role}: {text}\n")
-
-# ---------- MAIN LOOP ----------
-
-print("Voice Chef is ready. Say 'goodbye' to exit.\n")
+print("Voice Chef ready. Say 'goodbye' to exit.\n")
 
 while True:
     user_text = record_text()
@@ -107,9 +158,12 @@ while True:
         speak("Goodbye, see you later!")
         break
 
-    log_text("User", user_text)
+    result = ask_gpt_structured(user_text)
 
-    gpt_reply = ask_gpt(user_text)
-    log_text("Assistant", gpt_reply)
+    # Text to speak
+    response_text = result.get("response_text", "")
+    speak(response_text)
 
-    speak(gpt_reply)
+    # Actions for Unity/HoloLens
+    actions = result.get("actions", [])
+    print("Actions JSON:", actions)   # burada Unity'ye gönderilecek datayı görüyorsun
