@@ -14,8 +14,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   Keys: 010000000e000000
   Values:
-  - featureSets:
-    - com.microsoft.openxr.featureset.wmr
-  - featureSets:
-    - com.microsoft.openxr.featureset.hololens
+  - featureSets: []
+  - featureSets: []
   m_vulkanAdditionalGraphicsQueue: 0

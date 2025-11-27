@@ -6,6 +6,8 @@
 [Oo]bj/
 [Mm]emoryCaptures/
 UserSettings/
+
+# Asset meta data should only be ignored when the corresponding asset is also ignored
 *.csproj
 *.sln
 *.user
@@ -18,3 +20,25 @@ UserSettings/
 *.opendb
 *.VC.db
 .plastic/
+
+
+# Environment variables
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+
+# Visual Studio cache directory
+.vs/
+
+# Rider
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
