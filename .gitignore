@@ -21,6 +21,11 @@ UserSettings/
 *.VC.db
 .plastic/
 
+# Environment variables (contains API keys)
+.env
+VoicechefBE/.env
+**/.env
+
 
 # Ignore Unity scene files directory
 Assets/Scenes/
