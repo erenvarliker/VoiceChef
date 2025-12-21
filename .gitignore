@@ -18,3 +18,8 @@ UserSettings/
 *.opendb
 *.VC.db
 .plastic/
+
+# Environment variables (contains API keys)
+.env
+VoicechefBE/.env
+**/.env
