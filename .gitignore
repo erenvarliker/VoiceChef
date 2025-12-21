@@ -22,6 +22,9 @@ UserSettings/
 .plastic/
 
 
+# Ignore Unity scene files directory
+Assets/Scenes/
+
 # Environment variables
 .env
 *.env
