@@ -50,3 +50,16 @@ __pycache__/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Python bytecode / cache
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+
+# Python virtual environments
+.venv/
+venv/
+VoicechefBE/.venv/
+
+
