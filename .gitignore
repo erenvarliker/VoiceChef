@@ -27,8 +27,8 @@ VoicechefBE/.env
 **/.env
 
 
-# Ignore Unity scene files directory
-Assets/Scenes/
+
+
 
 # Environment variables
 .env

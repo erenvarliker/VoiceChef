@@ -148,7 +148,7 @@ MonoBehaviour:
     m_SelectedTrigger: Selected
     m_DisabledTrigger: Disabled
   m_Interactable: 1
-  m_TargetGraphic: {fileID: 0}
+  m_TargetGraphic: {fileID: 2092156105062525173}
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
@@ -377,6 +377,7 @@ GameObject:
   - component: {fileID: 1245401659664936358}
   - component: {fileID: 6259223033919412513}
   - component: {fileID: 1682523815904835247}
+  - component: {fileID: 3075100721831472541}
   m_Layer: 0
   m_Name: Canvas
   m_TagString: Untagged
@@ -468,3 +469,15 @@ MonoBehaviour:
   m_BlockingMask:
     serializedVersion: 2
     m_Bits: 4294967295
+--- !u!114 &3075100721831472541
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8830351649071844692}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ff4e3b9019304b5aaec5664de0778d21, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
