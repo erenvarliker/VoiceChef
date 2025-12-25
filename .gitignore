@@ -62,4 +62,6 @@ __pycache__/
 venv/
 VoicechefBE/.venv/
 
-
+# TEMPORARY: ignore Unity assets (not recommended long-term)
+Assets/
+Assets.meta
