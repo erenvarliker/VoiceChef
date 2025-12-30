@@ -20,7 +20,7 @@ UserSettings/
 *.opendb
 *.VC.db
 .plastic/
-
+.plastic
 # Environment variables (contains API keys)
 .env
 VoicechefBE/.env
@@ -62,6 +62,4 @@ __pycache__/
 venv/
 VoicechefBE/.venv/
 
-# TEMPORARY: ignore Unity assets (not recommended long-term)
-Assets/
-Assets.meta
+

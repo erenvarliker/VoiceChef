@@ -23,28 +23,24 @@ except ImportError:
 
 
 VOICE_CHEF_SYSTEM = """
-You are Voice Chef, a friendly, encouraging, and conversational cooking coach running inside a HoloLens AR app.
+You are Voice Chef, a friendly, simple, and conversational cooking coach running inside a HoloLens AR app.
 You guide users through cooking recipes step-by-step with detailed, helpful instructions.
 
 Your personality:
 - Warm, friendly, and encouraging (like a helpful friend in the kitchen)
-- Patient and supportive, especially for beginners
-- Provide detailed step-by-step guidance
-- Explain the "why" behind cooking techniques when helpful
-- Offer tips and tricks naturally in conversation
-- Celebrate progress and small wins
+- Use standard English grammar.
+- Do NOT use slang, "cool" words, or casual fillers.
+- Do NOT use emojis.
+- Prioritize clarity and brevity over friendliness.
 - Understand natural language and context - you don't need exact commands
 
 When interacting with users:
-- Be conversational and natural (speak like you're right there with them)
+- Be  natural (speak like you're right there with them)
 - Understand their intent from natural language, not just keywords
 - If they want to move forward, advance to the next step naturally
 - If they're tired or need a break, pause empathetically
-- If they ask questions, answer them helpfully
-- If they want to repeat something, do it naturally
-- Break down complex steps into smaller, manageable actions
-- Provide context about what they're doing and why
-- Keep responses concise but informative (2-4 sentences for TTS)
+- If the user asks a question, answer factually and briefly.
+- Keep responses concise but informative (2-3 sentences for TTS)
 
 You MUST respond as a single JSON object with this exact schema:
 {
@@ -386,20 +382,26 @@ Respond naturally and helpfully. If they want to advance, guide them to the next
         }
         return mapping.get(intent_label, "unclear")
     
+    # ... inside CookingCoach class ...
+
     def _handle_next_step(self, session: Session, custom_message: str = None) -> dict:
-        """Handle moving to next step with detailed, conversational guidance."""
-        # Check if already complete
+        """Handle moving to next step with detailed, conversational guidance + AUTO TIMER."""
+        
+        # 1. NEW: Clear all previous timers when moving to a new step
+        session.timers = []
+
+        # 1. Check if recipe is already done
         if session.current_step_index >= len(session.recipe.steps):
-            return {
+             return {
                 "action": ActionType.RECIPE_COMPLETE,
                 "tts_message": self._generate_completion_message(session),
                 "recipe_complete": True
             }
-        
-        # Move to next step
+
+        # 2. Advance Step
         session.current_step_index += 1
         
-        # Check if now complete
+        # 3. Check if we just finished
         if session.current_step_index >= len(session.recipe.steps):
             return {
                 "action": ActionType.RECIPE_COMPLETE,
@@ -407,10 +409,10 @@ Respond naturally and helpfully. If they want to advance, guide them to the next
                 "recipe_complete": True
             }
         
-        # Get current step
+        # 4. Get the new step data
         step = session.recipe.steps[session.current_step_index]
         
-        # Generate detailed, conversational instruction
+        # 5. Generate the base instruction text
         if custom_message:
             # Use LLM's natural response, but enhance with step details
             detailed_instruction = custom_message
@@ -420,13 +422,46 @@ Respond naturally and helpfully. If they want to advance, guide them to the next
             detailed_instruction = self._generate_detailed_step_instruction(
                 session, step, session.current_step_index + 1, len(session.recipe.steps)
             )
+
+        # ====================================================
+        # NEW LOGIC: AUTO-START TIMER
+        # ====================================================
+        timer_data = None
+        auto_timer_msg = ""
         
+        # If the step has a time duration (e.g., "10 minutes"), start a timer automatically
+        if step.estimated_time:
+            seconds = self._parse_duration_from_text(step.estimated_time)
+            
+            # Only auto-start if it's a valid duration (e.g. > 10 seconds)
+            if seconds > 10: 
+                # Create the timer
+                timer_id = str(uuid.uuid4())
+                new_timer = Timer(
+                    timer_id=timer_id,
+                    duration_seconds=seconds,
+                    started_at=datetime.utcnow()
+                )
+                session.timers.append(new_timer)
+                
+                # Create return data
+                timer_data = TimerData(
+                    timer_id=timer_id,
+                    duration_seconds=seconds,
+                    started_at=new_timer.started_at.isoformat()
+                )
+                
+                # Append to speech so user knows
+                auto_timer_msg = f" I've started a {step.estimated_time} timer for you."
+                detailed_instruction += auto_timer_msg
+
         return {
             "action": ActionType.NEXT_STEP,
             "current_step": session.current_step_index + 1,
             "total_steps": len(session.recipe.steps),
             "step_data": StepData(
                 step_number=step.step_number,
+                title=step.title,
                 instruction=step.instruction,
                 estimated_time=step.estimated_time,
                 requires_heat=step.requires_heat,
@@ -434,8 +469,30 @@ Respond naturally and helpfully. If they want to advance, guide them to the next
                 safety_confirmation=step.safety_confirmation
             ),
             "tts_message": detailed_instruction,
+            "timer_data": timer_data,  # Return the new timer immediately
             "recipe_complete": False
         }
+
+    def _parse_duration_from_text(self, text: str) -> int:
+        """Helper to parse '10 minutes' or '30 seconds' into int seconds."""
+        if not text: return 0
+        import re
+        text = text.lower()
+        
+        minutes = 0
+        seconds = 0
+        
+        # Regex for "X minutes"
+        min_match = re.search(r'(\d+)\s*min', text)
+        if min_match:
+            minutes = int(min_match.group(1))
+            
+        # Regex for "X seconds"
+        sec_match = re.search(r'(\d+)\s*sec', text)
+        if sec_match:
+            seconds = int(sec_match.group(1))
+            
+        return (minutes * 60) + seconds
     
     def _handle_repeat_step(self, session: Session, custom_message: str = None) -> dict:
         """Handle repeating current step with detailed explanation."""
@@ -574,6 +631,7 @@ Respond naturally and helpfully. If they want to advance, guide them to the next
     def _handle_resume(self, session: Session, custom_message: str = None) -> dict:
         """Handle resume command."""
         session.is_paused = False
+        session.active_warning = None  # <--- NEW: Clear the warning
         
         if custom_message:
             tts_msg = custom_message
@@ -670,6 +728,15 @@ Respond professionally and helpfully (2-3 sentences). Be understanding and guide
         """Handle emergency situations (e.g., user burned their hand)."""
         # Pause the cooking flow so nothing progresses silently
         session.is_paused = True
+
+        # NEW: Detect warning type to show correct UI
+        msg_lower = user_message.lower()
+        if "fire" in msg_lower or "smoke" in msg_lower:
+            session.active_warning = "fire"
+        elif "cut" in msg_lower or "bleed" in msg_lower:
+            session.active_warning = "cut"
+        else:
+            session.active_warning = "general"
 
         # Let the LLM generate a calm, supportive response + optional actions
         actions_data = self._ask_gpt_structured(user_message)
@@ -868,20 +935,21 @@ Ready to start? Just say 'next' when you're ready!"""
 I've prepared a complete recipe with {len(recipe.ingredients)} ingredients (they're listed above).
 The recipe has {recipe.total_steps} steps and will take about {total_time_str} total.
 
-Give them a warm, friendly, chatty, and enthusiastic introduction message. 
+Give them a warm, friendly, clear, and enthusiastic introduction message. 
 - Be excited and encouraging (like a friend helping in the kitchen)
 - DON'T repeat the ingredients list (they're already shown)
 - Mention the total time and number of steps
 - Let them know you'll guide them step-by-step
-- Be conversational and natural (2-3 sentences)
-- Use emojis if it feels natural
+- Be natural (2-3 sentences)
+- Do not use emojis
+- Keep responses concise (maximum 2 sentences)
 
 Make it feel like you're right there with them, ready to help!"""
             
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are Voice Chef, a friendly, chatty, and enthusiastic cooking coach. You're like a helpful friend in the kitchen - warm, encouraging, and excited to help. Be conversational and natural."},
+                    {"role": "system", "content": "You are Voice Chef, a friendly, clear, and enthusiastic cooking coach. You're like a helpful friend in the kitchen - warm, encouraging, and excited to help. Be conversational and natural."},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.9,

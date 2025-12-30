@@ -94,7 +94,8 @@ Create detailed, easy-to-follow recipes. Respond ONLY with valid JSON using:
 - ingredients: array of strings (with quantities)
 - steps: array of objects with:
   - step_number: int
-  - instruction: string (clear, single action per step)
+  - title: string (VERY SHORT summary, e.g. "Chop Onions", "Boil Water")
+  - instruction: string (full detailed instruction)
   - estimated_time: string (e.g., "5 minutes", "10 seconds")
   - requires_heat: boolean (true if using stove, oven, or any heat source)
   - requires_knife: boolean (true if cutting, chopping, or slicing)
@@ -145,6 +146,7 @@ Mark safety-critical steps accurately."""
                 
                 steps.append(RecipeStep(
                     step_number=step.get("step_number", idx + 1),
+                    title=step.get("title", f"Step {idx+1}"), # Map the title
                     instruction=step["instruction"],
                     estimated_time=step.get("estimated_time"),
                     requires_heat=requires_heat,

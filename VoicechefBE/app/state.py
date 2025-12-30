@@ -20,6 +20,7 @@ class Session:
         self.recipe = recipe
         self.current_step_index = -1  # -1 means not started
         self.is_paused = False
+        self.active_warning: Optional[str] = None  # <--- NEW: Stores "fire", "cut", etc.
         self.timers: list[Timer] = []
         self.interaction_log: list[dict] = []
         self.created_at = datetime.utcnow()

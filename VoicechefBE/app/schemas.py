@@ -22,6 +22,7 @@ class ActionType(str, Enum):
 class RecipeStep(BaseModel):
     """A single recipe step."""
     step_number: int
+    title: str = "Instruction"  # <--- NEW FIELD
     instruction: str
     estimated_time: Optional[str] = None
     requires_heat: bool = False
@@ -40,6 +41,7 @@ class Recipe(BaseModel):
 class StepData(BaseModel):
     """Step data for Unity display."""
     step_number: int
+    title: str = ""
     instruction: str
     estimated_time: Optional[str] = None
     requires_heat: bool = False

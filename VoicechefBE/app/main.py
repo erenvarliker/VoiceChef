@@ -1,5 +1,5 @@
 """FastAPI application for VoiceChef HoloGuide backend."""
-
+from datetime import datetime, timezone  # <-- add this
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 import whisper
@@ -206,36 +206,59 @@ async def interpret_command(request: InterpretRequest):
 @app.get("/session/{session_id}/status")
 async def get_session_status(session_id: str):
     """
-    Get current session status (for debugging/research).
-    
-    Returns: Session state, current step, timers, interaction log
+    Get current session status with full details for Unity UI.
     """
     try:
         session = state.get_session(session_id)
     except KeyError:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Session not found: {session_id}"
-        )
+        raise HTTPException(status_code=404, detail="Session not found")
     
-    current_step = None
+    # 1. Get Current Step Details
+    current_step_data = None
     if 0 <= session.current_step_index < len(session.recipe.steps):
         step = session.recipe.steps[session.current_step_index]
-        current_step = {
+        current_step_data = {
             "step_number": step.step_number,
+            "title": step.title,   # <--- ADD THIS
             "instruction": step.instruction,
             "estimated_time": step.estimated_time
         }
     
+    # 2. Calculate Active Timers (Remaining Time)
+    active_timers_data = []
+    
+    now = datetime.now(timezone.utc)
+    for t in session.timers:
+        start_time = t.started_at
+        
+        # SAFETY FIX: Ensure start_time is also timezone-aware
+        # If the timer was created with naive utcnow(), we simply tag it as UTC.
+        if start_time.tzinfo is None:
+            start_time = start_time.replace(tzinfo=timezone.utc)
+            
+        elapsed = (now - start_time).total_seconds()
+        remaining = max(0, t.duration_seconds - elapsed)
+        
+        if remaining > 0:
+            active_timers_data.append({
+                "timer_id": t.timer_id,
+                "remaining_seconds": remaining,
+                "total_seconds": t.duration_seconds
+            })
+
     return {
         "session_id": session.session_id,
         "dish_name": session.recipe.dish_name,
         "current_step_index": session.current_step_index,
         "total_steps": len(session.recipe.steps),
         "is_paused": session.is_paused,
-        "current_step": current_step,
-        "active_timers": len(session.timers),
-        "total_interactions": len(session.interaction_log)
+
+        "active_warning": session.active_warning,  # <--- NEW FIELD
+        "current_step": current_step_data,
+        
+        # New Fields for your UI:
+        "ingredients": session.recipe.ingredients, 
+        "timers": active_timers_data
     }
 
 
