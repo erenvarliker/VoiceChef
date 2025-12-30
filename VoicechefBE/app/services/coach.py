@@ -169,7 +169,18 @@ class CookingCoach:
         This creates a healthy conversational flow.
         """
         try:
-            # Build rich context about the current state
+            # ====================================================
+            # 1. SAFETY OVERRIDE (NEW CODE)
+            # Check this FIRST to guarantee warning triggers
+            # ====================================================
+            msg_lower = user_message.lower()
+            if any(w in msg_lower for w in ["fire", "smoke", "cut", "bleed", "hurt", "injury", "emergency", "911"]):
+                print("[CookingCoach] SAFETY OVERRIDE TRIGGERED")
+                return self._handle_emergency(session, user_message)
+
+            # ====================================================
+            # 2. BUILD CONTEXT (YOUR ORIGINAL CODE)
+            # ====================================================
             context = self._build_conversation_context(session)
             
             # Create prompt for natural understanding
@@ -231,6 +242,8 @@ Respond naturally and helpfully. If they want to advance, guide them to the next
                 return self._handle_pause(session, response_text)
             elif action_type == "resume":
                 return self._handle_resume(session, response_text)
+            elif action_type == "emergency": # <--- NEW HANDLER
+                return self._handle_emergency(session, user_message)
             elif action_type == "recipe_complete":
                 return {
                     "action": ActionType.RECIPE_COMPLETE,
@@ -240,7 +253,7 @@ Respond naturally and helpfully. If they want to advance, guide them to the next
             elif action_type == "answer_question":
                 return self._handle_question(session, user_message, response_text)
             else:  # continue_conversation or unknown
-                # Check for emergency keywords
+                # Check for emergency keywords (Backup check)
                 if any(word in user_message.lower() for word in ["burned", "cut", "hurt", "injury", "emergency", "help"]):
                     return self._handle_emergency(session, user_message)
                 # Otherwise, just continue conversation
@@ -387,6 +400,10 @@ Respond naturally and helpfully. If they want to advance, guide them to the next
     def _handle_next_step(self, session: Session, custom_message: str = None) -> dict:
         """Handle moving to next step with detailed, conversational guidance + AUTO TIMER."""
         
+        # 1. NEW: CLEAR SAFETY WARNINGS (So the red window disappears)
+        session.active_warning = None
+        session.is_paused = False
+
         # 1. NEW: Clear all previous timers when moving to a new step
         session.timers = []
 
@@ -496,6 +513,10 @@ Respond naturally and helpfully. If they want to advance, guide them to the next
     
     def _handle_repeat_step(self, session: Session, custom_message: str = None) -> dict:
         """Handle repeating current step with detailed explanation."""
+        # 1. NEW: CLEAR SAFETY WARNINGS
+        session.active_warning = None
+        session.is_paused = False
+
         # Check if we've started
         if session.current_step_index < 0 or session.current_step_index >= len(session.recipe.steps):
             return {
@@ -533,6 +554,12 @@ Respond naturally and helpfully. If they want to advance, guide them to the next
     
     def _handle_timer_command(self, session: Session, user_message: str, duration_seconds: int = None, custom_message: str = None) -> dict:
         """Handle timer-related commands."""
+
+
+        # 1. NEW: CLEAR SAFETY WARNINGS
+        session.active_warning = None
+        session.is_paused = False
+
         # Extract duration from message if not provided
         if duration_seconds is None:
             duration_seconds = self._extract_timer_duration(user_message)
@@ -725,45 +752,43 @@ Respond professionally and helpfully (2-3 sentences). Be understanding and guide
             }
 
     def _handle_emergency(self, session: Session, user_message: str) -> dict:
-        """Handle emergency situations (e.g., user burned their hand)."""
+        """
+        Handle emergency situations.
+        1. Sets the visual warning flag immediately for Unity.
+        2. Asks AI for specific medical/safety advice.
+        """
         # Pause the cooking flow so nothing progresses silently
         session.is_paused = True
 
-        # NEW: Detect warning type to show correct UI
+        # 1. IMMEDIATE VISUAL TRIGGER (For Unity)
         msg_lower = user_message.lower()
-        if "fire" in msg_lower or "smoke" in msg_lower:
+        if any(w in msg_lower for w in ["fire", "smoke", "burn"]):
             session.active_warning = "fire"
-        elif "cut" in msg_lower or "bleed" in msg_lower:
+        elif any(w in msg_lower for w in ["cut", "bleed", "knife", "hurt"]):
             session.active_warning = "cut"
         else:
             session.active_warning = "general"
 
-        # Let the LLM generate a calm, supportive response + optional actions
-        actions_data = self._ask_gpt_structured(user_message)
-        answer = actions_data.get(
-            "response_text",
-            "It sounds like you may be hurt. Please stop cooking and take care of your hand. If needed, seek medical help."
-        )
-        actions = actions_data.get("actions", []) or []
-
-        # Ensure there is at least one explicit warning action for Unity
-        has_warning = any(a.get("type") == "show_warning" for a in actions)
-        if not has_warning:
-            actions.append(
-                {
-                    "type": "show_warning",
-                    "parameters": {
-                        "severity": "high",
-                        "raw_text": user_message,
-                    },
-                }
+        # 2. INTELLIGENT ADVICE (The "Smart" part)
+        # We still ask GPT so the user gets specific advice (e.g., "Run cold water on the burn")
+        # instead of a generic hardcoded string.
+        try:
+            actions_data = self._ask_gpt_structured(user_message)
+            answer = actions_data.get(
+                "response_text",
+                "Please stop cooking immediately and focus on your safety. Call for help if needed."
             )
+            actions = actions_data.get("actions", []) or []
+        except Exception:
+            # Fallback if GPT fails, but the visual warning will still work!
+            answer = "Please stop cooking and ensure your safety."
+            actions = []
 
         return {
             "action": ActionType.EMERGENCY,
             "current_step": session.current_step_index + 1 if session.current_step_index >= 0 else 0,
             "total_steps": len(session.recipe.steps),
-            "tts_message": answer,
+            "tts_message": answer, # AI generated advice
             "actions": actions,
             "recipe_complete": False,
         }

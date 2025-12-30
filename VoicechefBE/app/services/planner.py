@@ -119,6 +119,15 @@ Mark safety-critical steps accurately."""
             )
             
             content = response.choices[0].message.content
+
+            # --- NEW CODE START ---
+            # Clean up Markdown wrappers if the AI adds them
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
+            # --- NEW CODE END ---
+
             try:
                 recipe_data = json.loads(content)
             except Exception as parse_err:
